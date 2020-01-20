@@ -88,6 +88,9 @@ public:
     static std::shared_ptr<HalfEdgeTriangleMesh> CreateFromTriangleMesh(
             const TriangleMesh &mesh);
 
+    static std::shared_ptr<HalfEdgeTriangleMesh> CreateFromTriangleMeshSimple(
+            const TriangleMesh &mesh);
+
 protected:
     HalfEdgeTriangleMesh(Geometry::GeometryType type) : MeshBase(type) {}
 
