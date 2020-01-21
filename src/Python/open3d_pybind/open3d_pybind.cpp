@@ -37,6 +37,7 @@
 
 PYBIND11_MODULE(open3d, m) {
     m.doc() = "Python binding of Open3D";
+    py::bind_vector<std::vector<std::size_t>>(m, "VectorInts", py::buffer_protocol());
 
     // Register this first, other submodule (e.g. odometry) might depend on this
     pybind_utility(m);

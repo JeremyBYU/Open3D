@@ -26,8 +26,12 @@
 
 #include "Open3D/Geometry/HalfEdgeTriangleMesh.h"
 #include "Open3D/Geometry/TriangleMesh.h"
+#include "Open3D/Utility/robin_hood.h"
 
 #include <numeric>
+#include <limits>
+#include <chrono>
+#include <iostream>
 
 #include "Open3D/Utility/Console.h"
 #include "Open3D/Utility/Helper.h"
@@ -289,86 +293,83 @@ HalfEdgeTriangleMesh::CreateFromTriangleMesh(const TriangleMesh &mesh) {
     return het_mesh;
 }
 
-std::shared_ptr<HalfEdgeTriangleMesh>
-HalfEdgeTriangleMesh::CreateFromTriangleMeshSimple(const TriangleMesh &mesh) {
-    auto mesh_cpy = std::make_shared<TriangleMesh>();
-    auto het_mesh = std::make_shared<HalfEdgeTriangleMesh>();
 
-    // Copy
-    mesh_cpy->vertices_ = mesh.vertices_;
-    mesh_cpy->vertex_colors_ = mesh.vertex_colors_;
-    mesh_cpy->triangles_ = mesh.triangles_;
-    mesh_cpy->triangle_normals_ = mesh.triangle_normals_;
+inline size_t bijective_fn(size_t a, size_t b)
+{
+    return ((a + b) * (a + b + 1) / 2) + b;
+}
 
-    // Purge to remove duplications
-    // mesh_cpy->RemoveDuplicatedVertices();
-    // mesh_cpy->RemoveDuplicatedTriangles();
-    // mesh_cpy->RemoveUnreferencedVertices();
-    // mesh_cpy->RemoveDegenerateTriangles();
-
-    // Collect half edges
-    // Check: for valid manifolds, there mustn't be duplicated half-edges
-    std::unordered_map<Eigen::Vector2i, size_t,
-                       utility::hash_eigen::hash<Eigen::Vector2i>>
+std::vector<size_t> HalfEdgeTriangleMesh::ExtractHalfEdges(
+            const TriangleMesh &mesh)
+{
+    // auto before = std::chrono::high_resolution_clock::now();
+    size_t max_limit = std::numeric_limits<size_t>::max();
+    std::vector<size_t> halfedges(mesh.triangles_.size() * 3, max_limit);
+    std::vector<Eigen::Vector2i> halfedges_pi(mesh.triangles_.size() * 3);
+    // robin_hood::unordered_map<Eigen::Vector2i, size_t,
+    //                    utility::hash_eigen::hash<Eigen::Vector2i>>
+    //         vertex_indices_to_half_edge_index;
+    robin_hood::unordered_map<size_t, size_t>
             vertex_indices_to_half_edge_index;
+    vertex_indices_to_half_edge_index.reserve(mesh.triangles_.size() * 3);
+    // auto after = std::chrono::high_resolution_clock::now();
+    // auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(after - before);
+    // std::cout << "Create Datastructures took " << elapsed.count() << " milliseconds" << std::endl;
 
     for (size_t triangle_index = 0;
-         triangle_index < mesh_cpy->triangles_.size(); triangle_index++) {
-        const Eigen::Vector3i &triangle = mesh_cpy->triangles_[triangle_index];
-        size_t num_half_edges = het_mesh->half_edges_.size();
+        triangle_index < mesh.triangles_.size(); triangle_index++) {
+
+        const Eigen::Vector3i &triangle = mesh.triangles_[triangle_index];
+        size_t num_half_edges = triangle_index * 3;
+
 
         size_t he_0_index = num_half_edges;
         size_t he_1_index = num_half_edges + 1;
         size_t he_2_index = num_half_edges + 2;
-        HalfEdge he_0(Eigen::Vector2i(triangle(0), triangle(1)),
-                      int(triangle_index), int(he_1_index), -1);
-        HalfEdge he_1(Eigen::Vector2i(triangle(1), triangle(2)),
-                      int(triangle_index), int(he_2_index), -1);
-        HalfEdge he_2(Eigen::Vector2i(triangle(2), triangle(0)),
-                      int(triangle_index), int(he_0_index), -1);
+        size_t he_0_mapped = bijective_fn(triangle(0), triangle(1));
+        size_t he_1_mapped = bijective_fn(triangle(1), triangle(2));
+        size_t he_2_mapped = bijective_fn(triangle(2), triangle(0));
 
-        if (vertex_indices_to_half_edge_index.find(he_0.vertex_indices_) !=
-                    vertex_indices_to_half_edge_index.end() ||
-            vertex_indices_to_half_edge_index.find(he_1.vertex_indices_) !=
-                    vertex_indices_to_half_edge_index.end() ||
-            vertex_indices_to_half_edge_index.find(he_2.vertex_indices_) !=
-                    vertex_indices_to_half_edge_index.end()) {
-            utility::LogError(
-                    "ComputeHalfEdges failed. Duplicated half-edges.");
-        }
+        Eigen::Vector2i &he_0 = halfedges_pi[he_0_index];
+        Eigen::Vector2i &he_1 = halfedges_pi[he_1_index];
+        Eigen::Vector2i &he_2 = halfedges_pi[he_2_index];
+    
+        he_0(0) = triangle(0);he_0(1) = triangle(1);
+        he_1(0) = triangle(1);he_1(1) = triangle(2);
+        he_2(0) = triangle(2);he_2(1) = triangle(0);
 
-        het_mesh->half_edges_.push_back(he_0);
-        het_mesh->half_edges_.push_back(he_1);
-        het_mesh->half_edges_.push_back(he_2);
-        vertex_indices_to_half_edge_index[he_0.vertex_indices_] = he_0_index;
-        vertex_indices_to_half_edge_index[he_1.vertex_indices_] = he_1_index;
-        vertex_indices_to_half_edge_index[he_2.vertex_indices_] = he_2_index;
+        vertex_indices_to_half_edge_index[he_0_mapped] = he_0_index;
+        vertex_indices_to_half_edge_index[he_1_mapped] = he_1_index;
+        vertex_indices_to_half_edge_index[he_2_mapped] = he_2_index;
+
     }
 
+    // auto after2 = std::chrono::high_resolution_clock::now();
+    // elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(after2 - after);
+    // std::cout << "Triangle loop took " << elapsed.count() << " milliseconds" << std::endl;
     // Fill twin half-edge. In the previous step, it is already guaranteed that
     // each half-edge can have at most one twin half-edge.
-    for (size_t this_he_index = 0; this_he_index < het_mesh->half_edges_.size();
-         this_he_index++) {
-        HalfEdge &this_he = het_mesh->half_edges_[this_he_index];
-        Eigen::Vector2i twin_end_points(this_he.vertex_indices_(1),
-                                        this_he.vertex_indices_(0));
-        if (this_he.twin_ == -1 &&
-            vertex_indices_to_half_edge_index.find(twin_end_points) !=
+    for (size_t this_he_index = 0; this_he_index < halfedges.size(); this_he_index++) {
+        size_t &that_he_index = halfedges[this_he_index];
+        Eigen::Vector2i &this_he =  halfedges_pi[this_he_index];
+        size_t that_he_mapped = bijective_fn(this_he(1), this_he(0));
+        if (that_he_index == max_limit &&
+            vertex_indices_to_half_edge_index.find(that_he_mapped) !=
                     vertex_indices_to_half_edge_index.end()) {
             size_t twin_he_index =
-                    vertex_indices_to_half_edge_index[twin_end_points];
-            HalfEdge &twin_he = het_mesh->half_edges_[twin_he_index];
-            this_he.twin_ = int(twin_he_index);
-            twin_he.twin_ = int(this_he_index);
+                    vertex_indices_to_half_edge_index[that_he_mapped];
+            halfedges[this_he_index] = twin_he_index;
+            halfedges[twin_he_index] = this_he_index;
         }
     }
+    // auto after3 = std::chrono::high_resolution_clock::now();
+    // elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(after3 - after2);
+    // std::cout << "Half Edge loop took " << elapsed.count() << " milliseconds" << std::endl;
 
-    het_mesh->vertices_ = mesh_cpy->vertices_;
-    het_mesh->vertex_colors_ = mesh_cpy->vertex_colors_;
-    het_mesh->triangles_ = mesh_cpy->triangles_;
-    het_mesh->triangle_normals_ = mesh_cpy->triangle_normals_;
+    // elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(after3 - before);
+    // std::cout << "Total time took " << elapsed.count() << " milliseconds" << std::endl;
 
-    return het_mesh;
+    return halfedges;
 }
 
 

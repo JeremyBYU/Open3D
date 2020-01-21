@@ -47,6 +47,7 @@ typedef std::vector<Eigen::Vector4i, open3d::utility::Vector4i_allocator>
         temp_eigen_vector4i;
 
 PYBIND11_MAKE_OPAQUE(std::vector<int>);
+PYBIND11_MAKE_OPAQUE(std::vector<size_t>);
 PYBIND11_MAKE_OPAQUE(std::vector<double>);
 PYBIND11_MAKE_OPAQUE(std::vector<Eigen::Vector3d>);
 PYBIND11_MAKE_OPAQUE(std::vector<Eigen::Vector3i>);

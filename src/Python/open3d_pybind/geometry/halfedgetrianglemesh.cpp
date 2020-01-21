@@ -138,12 +138,10 @@ void pybind_halfedgetrianglemesh(py::module &m) {
                         "Convert HalfEdgeTriangleMesh from TriangleMesh. "
                         "Throws exception if "
                         "the input mesh is not manifolds")
-            .def_static("create_from_triangle_mesh_simple",
-                        &geometry::HalfEdgeTriangleMesh::CreateFromTriangleMeshSimple,
+            .def_static("extract_halfedges",
+                        &geometry::HalfEdgeTriangleMesh::ExtractHalfEdges,
                         "mesh"_a,
-                        "Convert HalfEdgeTriangleMesh from TriangleMesh. "
-                        "Throws exception if "
-                        "the input mesh is not manifolds")
+                        "Extract Half Edges from TriangleMesh")
             .def_readwrite("half_edges",
                            &geometry::HalfEdgeTriangleMesh::half_edges_,
                            "List of HalfEdge in the mesh")

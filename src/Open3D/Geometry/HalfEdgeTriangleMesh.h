@@ -88,7 +88,7 @@ public:
     static std::shared_ptr<HalfEdgeTriangleMesh> CreateFromTriangleMesh(
             const TriangleMesh &mesh);
 
-    static std::shared_ptr<HalfEdgeTriangleMesh> CreateFromTriangleMeshSimple(
+    static std::vector<size_t> ExtractHalfEdges(
             const TriangleMesh &mesh);
 
 protected:
